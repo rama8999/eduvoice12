@@ -1,5 +1,6 @@
+
+
 import React, { useState, useEffect } from "react";
-const h = React.createElement;
 import { PAGES, FB0, ST0 } from "./data.js";
 import { useStore } from "./hooks.js";
 import Home from "./pages/Home.jsx";
@@ -9,44 +10,88 @@ import Summary from "./pages/Summary.jsx";
 import Admin from "./pages/Admin.jsx";
 import Contact from "./pages/Contact.jsx";
 
+const h = React.createElement;
+
+const STUDENT_PAGES = [
+  "home",
+  "students",
+  "feedback",
+  "summary",
+  "contact",
+];
+
+const ADMIN_PAGES = [
+  "home",
+  "students",
+  "feedback",
+  "summary",
+  "admin",
+  "contact",
+];
+
+const PAGE_LABELS = {
+  home: "Home",
+  students: "Students",
+  feedback: "Feedback",
+  summary: "Summary",
+  admin: "Admin",
+  contact: "Contact",
+};
+
+function getSavedUser() {
+  try {
+    return JSON.parse(localStorage.getItem("ev-user")) || null;
+  } catch {
+    return null;
+  }
+}
+
+function getPage(user) {
+  if (!user) return "admin";
+
+  const hash = window.location.hash.slice(1);
+  const allowedPages =
+    user.role === "admin" ? ADMIN_PAGES : STUDENT_PAGES;
+
+  return allowedPages.includes(hash)
+    ? hash
+    : user.role === "admin"
+      ? "admin"
+      : "students";
+}
+
 export default function App() {
-  const get = () => {
-    let savedUser = null;
+  const [user, setUser] = useState(getSavedUser);
 
-    try {
-      savedUser = JSON.parse(localStorage.getItem("ev-user"));
-    } catch {
-      savedUser = null;
-    }
-
-    // Login avvakapothe direct ga Login page open avuthundi
-    if (!savedUser) return "admin";
-
-    const hash = window.location.hash.slice(1);
-
-    return PAGES.some((p) => p[0] === hash) ? hash : "students";
-  };
-
-  const [pg, setPg] = useState(get);
+  const [pg, setPg] = useState(() => getPage(getSavedUser()));
   const [open, setOpen] = useState(false);
   const [tm, setTm] = useState(null);
 
   const [fb, setFb] = useStore("ev-fb", FB0);
   const [st, setSt] = useStore("ev-st", ST0);
 
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("ev-user")) || null;
-    } catch {
-      return null;
-    }
-  });
-
   useEffect(() => {
     const handleHash = () => {
-      const nextPage = get();
+      const currentUser = getSavedUser();
+      const nextPage = getPage(currentUser);
+
       setPg(nextPage);
       setOpen(false);
+
+      const allowedPages =
+        currentUser?.role === "admin"
+          ? ADMIN_PAGES
+          : STUDENT_PAGES;
+
+      if (!currentUser) {
+        if (window.location.hash !== "#admin") {
+          window.location.hash = "admin";
+        }
+      } else if (
+        !allowedPages.includes(window.location.hash.slice(1))
+      ) {
+        window.location.hash = nextPage;
+      }
     };
 
     window.addEventListener("hashchange", handleHash);
@@ -72,13 +117,11 @@ export default function App() {
       return;
     }
 
-    if (user?.role === "student" && page === "admin") {
-      toast("Admin access required");
-      return;
-    }
+    const allowedPages =
+      user?.role === "admin" ? ADMIN_PAGES : STUDENT_PAGES;
 
-    if (user?.role === "admin" && page === "feedback") {
-      toast("Only students can submit feedback");
+    if (user && !allowedPages.includes(page)) {
+      toast("You do not have access to this page");
       return;
     }
 
@@ -108,8 +151,8 @@ export default function App() {
     localStorage.removeItem("ev-user");
 
     setUser(null);
-    window.location.hash = "admin";
     setPg("admin");
+    window.location.hash = "admin";
     setOpen(false);
 
     toast("Logged out successfully");
@@ -121,9 +164,9 @@ export default function App() {
       {
         ...feedback,
         id: Date.now(),
-        t: Date.now()
+        t: Date.now(),
       },
-      ...previous
+      ...previous,
     ]);
 
     toast("Feedback submitted successfully!");
@@ -135,7 +178,10 @@ export default function App() {
   };
 
   const del = (id) => {
-    setFb((previous) => previous.filter((item) => item.id !== id));
+    setFb((previous) =>
+      previous.filter((item) => item.id !== id)
+    );
+
     toast("Feedback deleted");
   };
 
@@ -147,14 +193,13 @@ export default function App() {
 
   let view;
 
-  // Login avvakapothe Login / Sign up page matrame
   if (!user) {
     view = h(Admin, {
       fb,
       del,
       reset,
       onLogin: handleLogin,
-      loggedIn: false
+      loggedIn: false,
     });
   } else if (user.role === "student") {
     const studentPages = {
@@ -164,23 +209,23 @@ export default function App() {
         st,
         setSt,
         toast,
-        user
+        user,
       }),
 
       feedback: h(Feedback, {
         add,
-        user
+        user,
       }),
 
       summary: h(Summary, {
         fb,
-        user
+        user,
       }),
 
       contact: h(Contact, {
         toast,
-        user
-      })
+        user,
+      }),
     };
 
     view = studentPages[pg] || studentPages.students;
@@ -192,12 +237,18 @@ export default function App() {
         st,
         setSt,
         toast,
-        user
+        user,
+      }),
+
+      // Admin can also open and submit the Feedback form
+      feedback: h(Feedback, {
+        add,
+        user,
       }),
 
       summary: h(Summary, {
         fb,
-        user
+        user,
       }),
 
       admin: h(Admin, {
@@ -206,13 +257,13 @@ export default function App() {
         reset,
         onLogin: handleLogin,
         onLogout: logout,
-        loggedIn: true
+        loggedIn: true,
       }),
 
       contact: h(Contact, {
         toast,
-        user
-      })
+        user,
+      }),
     };
 
     view = adminPages[pg] || adminPages.admin;
@@ -222,20 +273,25 @@ export default function App() {
       del,
       reset,
       onLogin: handleLogin,
-      loggedIn: false
+      loggedIn: false,
     });
   }
 
-  // Guest ki Login matrame; login ayyaka role batti menu
+  // Feedback is included in the Admin and Student navigation
   const navPages = !user
     ? [["admin", "Login"]]
-    : PAGES.filter(([key]) => {
-        if (user.role === "admin") {
-          return ["home", "students", "summary", "admin", "contact"].includes(key);
-        }
+    : (user.role === "admin" ? ADMIN_PAGES : STUDENT_PAGES).map(
+        (key) => {
+          const existingPage = PAGES.find(
+            (page) => page[0] === key
+          );
 
-        return key !== "admin";
-      });
+          return [
+            key,
+            existingPage?.[1] || PAGE_LABELS[key] || key,
+          ];
+        }
+      );
 
   return h(
     "div",
@@ -252,7 +308,7 @@ export default function App() {
           "div",
           {
             className: "logo",
-            onClick: () => go(user ? "home" : "admin")
+            onClick: () => go(user ? "home" : "admin"),
           },
           h("i", null, "E"),
           "EduVoice"
@@ -272,7 +328,7 @@ export default function App() {
                 onClick: (e) => {
                   e.preventDefault();
                   go(key);
-                }
+                },
               },
               label
             )
@@ -283,7 +339,7 @@ export default function App() {
               "button",
               {
                 className: "btn s",
-                onClick: logout
+                onClick: logout,
               },
               "Logout"
             )
@@ -298,7 +354,7 @@ export default function App() {
               className: "ib burger",
               "aria-label": "Toggle navigation",
               "aria-expanded": open,
-              onClick: () => setOpen((previous) => !previous)
+              onClick: () => setOpen((previous) => !previous),
             },
             open ? "✕" : "☰"
           )
@@ -319,7 +375,6 @@ export default function App() {
         tm
       ),
 
-    // Login page lo footer avasaram ledu
     user &&
       h(
         "footer",
@@ -355,7 +410,7 @@ export default function App() {
                     onClick: (e) => {
                       e.preventDefault();
                       go(key);
-                    }
+                    },
                   },
                   label
                 )
